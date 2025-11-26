@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sistema de Gestión Académica - Presentación</title>
+
+  <!-- Tailwind CDN (rápido para prototipo/página estática) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Lucide icons (UMD) -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+  <style>
+    /* micro-ajustes para mejor lectura en pantallas pequeñas */
+    .slide-indicator { min-width: 12px; transition: all .2s; }
+    .code-header { user-select: none; }
+    /* para el "glow" cuando está seleccionado */
+    .selected-border { box-shadow: 0 10px 25px rgba(59,130,246,.18); border-color: rgba(59,130,246,.6); }
+    /* prevent tailwind JIT dynamic classes problem in static pipeline (we use class maps) */
+  </style>
+</head>
+<body class="antialiased bg-slate-900 text-slate-800">
+
+  <div id="app" class="min-h-screen p-8">
+    <div class="max-w-6xl mx-auto">
+      <!-- Header (dinámico) -->
+      <div id="header" class="bg-white rounded-t-2xl p-6 shadow-xl">
+        <!-- contenido inyectado por JS -->
+      </div>
+
+      <!-- Contenido (diapositiva) -->
+      <div id="content" class="bg-white p-8 shadow-xl min-h-[500px]">
+        <!-- contenido inyectado -->
+      </div>
+
+      <!-- Controles -->
+      <div class="bg-white rounded-b-2xl p-6 shadow-xl flex items-center justify-between">
+        <button id="prevBtn" class="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">
+          <i data-lucide="chevron-left" class="w-5 h-5"></i>
+          <span>Anterior</span>
+        </button>
+
+        <div id="dots" class="flex gap-2"></div>
+
+        <button id="nextBtn" class="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">
+          <span>Siguiente</span>
+          <i data-lucide="chevron-right" class="w-5 h-5"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  /********************************************************************************
+   * Presentación estática + JS (sin React)
+   * - Usa lucide.createIcons() para reemplazar <i data-lucide="...">
+   * - Slides definidos como objetos con contenido HTML.
+   * - CodeBlocks colapsables: al hacer click en la cabecera se muestra la explicación
+   * - Navegación por botones, puntos y teclas izquierda/derecha
+   ********************************************************************************/
+
+  (function () {
+    // helper: sanitizar texto para <pre> colocando en textContent
+    function createPreFromString(codeString) {
+      const pre = document.createElement('pre');
+      pre.className = 'whitespace-pre-wrap'; // allow wrap in narrow screens
+      pre.style.margin = 0;
+      const code = document.createElement('code');
+      code.textContent = codeString;
+      pre.appendChild(code);
+      return pre;
+    }
+
+    // Mapa de colores para las tarjetas de entidades
+    const colorMap = {
+      blue: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-600', title: 'text-blue-800' },
+      purple: { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-600', title: 'text-purple-800' },
+      green: { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-600', title: 'text-green-800' },
+      orange: { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-600', title: 'text-orange-800' },
+      red: { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-600', title: 'text-red-800' },
+      indigo: { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-600', title: 'text-indigo-800' }
+    };
+
+    // Código de ejemplo (corregido) usado en varios CodeBlocks
+    const codes = {
+      prep: `USE master;
+GO
+
+-- Cerrar conexiones y eliminar BD si existe
+IF EXISTS (SELECT * FROM sys.databases WHERE name = 'GestionAcademica')
+BEGIN
+  ALTER DATABASE GestionAcademica SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+  DROP DATABASE GestionAcademica;
+END
+GO`,
+      createDB: `-- Crear la base de datos
+CREATE DATABASE GestionAcademica;
+GO
+
+-- Usar la base de datos
+USE GestionAcademica;
+GO`,
+      carrerasDDL: `CREATE TABLE Carreras (
+  CarreraID INT PRIMARY KEY IDENTITY(1,1),
+  NombreCarrera NVARCHAR(100) NOT NULL,
+  Duracion INT
+);
+GO`,
+      carrerasData: `INSERT INTO Carreras (NombreCarrera, Duracion)
+VALUES
+('Tecnicatura en Programación', 5),
+('Administración de Empresas', 4),
+('Contador Público', 5);
+GO`,
+      profesoresDDL: `CREATE TABLE Profesores (
+  ProfesorID INT PRIMARY KEY IDENTITY(1,1),
+  Nombre NVARCHAR(100) NOT NULL,
+  Apellido NVARCHAR(100) NOT NULL,
+  Especialidad NVARCHAR(100)
+);
+GO`,
+      profesoresData: `INSERT INTO Profesores (Nombre, Apellido, Especialidad)
+VALUES
+('Carlos', 'Codigoni', 'Programación'),
+('Pablo', 'Carrizo', 'Bases de Datos'),
+('Marcela', 'Silva', 'Matemáticas');
+GO`,
+      estudiantesDDL: `CREATE TABLE Estudiantes (
+  EstudianteID INT PRIMARY KEY IDENTITY(1,1),
+  Nombre NVARCHAR(100) NOT NULL,
+  Apellido NVARCHAR(100) NOT NULL,
+  DNI NVARCHAR(20),
+  CarreraID INT,
+  FOREIGN KEY (CarreraID) REFERENCES Carreras(CarreraID)
+);
+GO`,
+      estudiantesData: `INSERT INTO Estudiantes (Nombre, Apellido, DNI, CarreraID)
+VALUES
+('Belén', 'Gonzalez', '37416817', 1),
+('Mateo', 'Diaz', '40221548', 1),
+('Mariela', 'Herrera', '33854265', 2),
+('Lautaro', 'Jover', '40125896', 1),
+('Nazareno', 'Vargas', '38566235', 3);
+GO`,
+      materiasDDL: `CREATE TABLE Materias (
+  MateriaID INT PRIMARY KEY IDENTITY(1,1),
+  NombreMateria NVARCHAR(100) NOT NULL,
+  CargaHoraria INT,
+  ProfesorID INT,
+  CarreraID INT,
+  FOREIGN KEY (ProfesorID) REFERENCES Profesores(ProfesorID),
+  FOREIGN KEY (CarreraID) REFERENCES Carreras(CarreraID)
+);
+GO`,
+      materiasData: `INSERT INTO Materias (NombreMateria, CargaHoraria, ProfesorID, CarreraID)
+VALUES
+('Programación I', 6, 1, 1),
+('Base de Datos', 4, 2, 2),
+('Calculo I', 5, 3, 3),
+('Algoritmos', 6, 1, 1);
+GO`,
+      inscripcionesDDL: `CREATE TABLE Inscripciones (
+  InscripcionID INT PRIMARY KEY IDENTITY(1,1),
+  EstudianteID INT,
+  MateriaID INT,
+  FechaInscripcion DATE,
+  FOREIGN KEY (EstudianteID) REFERENCES Estudiantes(EstudianteID),
+  FOREIGN KEY (MateriaID) REFERENCES Materias(MateriaID)
+);
+GO`,
+      inscripcionesData: `INSERT INTO Inscripciones (EstudianteID, MateriaID, FechaInscripcion)
+VALUES
+(1, 1, '2025-02-15'), -- Belén en Programación I
+(1, 2, '2025-08-15'), -- Belén en Base de Datos
+(2, 1, '2025-02-15'), -- Mateo en Programación I
+(3, 1, '2025-02-15'); -- Mariela en Programación I
+GO`,
+      calificacionesDDL: `CREATE TABLE Calificaciones (
+  CalificacionID INT PRIMARY KEY IDENTITY(1,1),
+  InscripcionID INT,
+  Nota DECIMAL(5,2),
+  Periodo NVARCHAR(20),
+  FOREIGN KEY (InscripcionID) REFERENCES Inscripciones(InscripcionID)
+);
+GO`,
+      calificacionesData: `INSERT INTO Calificaciones (InscripcionID, Nota, Periodo)
+VALUES
+(1, 85.50, 'Primer Parcial'),
+(2, 90.00, 'Segundo Parcial'),
+(3, 78.00, 'Primer Parcial'),
+(4, 92.00, 'Primer Parcial');
+GO`
+    };
+
+    // Slides: cada slide tiene title, subtitle (opcional), iconName y html content as DOM-building function
+    const slides = [
+      {
+        id: 0,
+        title: 'Sistema de Gestión Académica',
+        subtitle: 'Base de Datos Relacional en SQL Server',
+        icon: 'database',
+        render: () => {
+          const container = document.createElement('div');
+          container.className = 'space-y-8';
+
+          // header area
+          const head = document.createElement('div');
+          head.className = 'text-center';
+          head.innerHTML = `
+            <div class="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl shadow-lg mb-6">
+              <i data-lucide="database" class="w-14 h-14 text-white"></i>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">Proyecto Final - Base de Datos</h2>
+            <p class="text-lg text-gray-600">Diseño e Implementación de un Sistema Académico Completo</p>
+          `;
+          container.appendChild(head);
+
+          // integrantes
+          const teamWrap = document.createElement('div');
+          teamWrap.className = 'bg-gradient-to-br from-slate-50 to-blue-50 rounded-xl p-6 border border-blue-100';
+          teamWrap.innerHTML = `
+            <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <i data-lucide="users" class="w-5 h-5 text-blue-600"></i>
+              Integrantes del Proyecto
+            </h3>
+          `;
+          const grid = document.createElement('div');
+          grid.className = 'grid grid-cols-2 gap-4';
+          const names = [
+            "DIAZ SANCHEZ, Mateo",
+            "GONZALEZ LOTO, Maria Belén",
+            "HERRERA, Mariela Veronica",
+            "JOVER CARGEMEL, Lautaro Luis",
+            "VARGAS BESTANI, Nazareno"
+          ];
+          names.forEach((name, idx) => {
+            const card = document.createElement('div');
+            card.className = 'flex items-center gap-3 bg-white p-3 rounded-lg shadow-sm border border-gray-200';
+            const initial = document.createElement('div');
+            initial.className = 'w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold';
+            initial.textContent = name.charAt(0);
+            const span = document.createElement('span');
+            span.className = 'text-gray-700 font-medium text-sm';
+            span.textContent = name;
+            card.appendChild(initial);
+            card.appendChild(span);
+            grid.appendChild(card);
+          });
+          teamWrap.appendChild(grid);
+          container.appendChild(teamWrap);
+
+          // footer small
+          const footer = document.createElement('div');
+          footer.className = 'text-center pt-4';
+          footer.innerHTML = `
+            <div class="inline-flex items-center gap-2 text-gray-500 text-sm">
+              <i data-lucide="graduation-cap" class="w-5 h-5"></i>
+              <span>Universidad Tecnológica Nacional</span>
+            </div>
+          `;
+          container.appendChild(footer);
+
+          return container;
+        }
+      },
+
+      {
+        id: 1,
+        title: 'Problemática Identificada',
+        icon: 'file-text',
+        render: () => {
+          const wrap = document.createElement('div');
+          wrap.className = 'space-y-6';
+          const left = document.createElement('div');
+          left.className = 'bg-red-50 border-l-4 border-red-500 p-6 rounded';
+          left.innerHTML = `
+            <h3 class="font-bold text-red-800 mb-3 text-lg">Situación Actual</h3>
+            <ul class="space-y-2 text-gray-700">
+              <li>• Múltiples hojas de cálculo sin sincronizar</li>
+              <li>• Archivos compartidos sin control de versiones</li>
+              <li>• Control descentralizado de información</li>
+              <li>• Sistema caótico y propenso a errores</li>
+              <li>• Dificultad para rastrear trayectorias académicas</li>
+            </ul>
+          `;
+          const right = document.createElement('div');
+          right.className = 'bg-green-50 border-l-4 border-green-500 p-6 rounded';
+          right.innerHTML = `
+            <h3 class="font-bold text-green-800 mb-3 text-lg">Solución Propuesta</h3>
+            <p class="text-gray-700">Base de datos relacional que centraliza y organiza toda la información académica con integridad referencial garantizada</p>
+          `;
+          wrap.appendChild(left);
+          wrap.appendChild(right);
+          return wrap;
+        }
+      },
+
+      {
+        id: 2,
+        title: 'Entidades del Sistema',
+        icon: 'git-branch',
+        render: () => {
+          const wrap = document.createElement('div');
+          wrap.className = 'grid grid-cols-2 gap-4';
+          const entities = [
+            { name: "Carreras", icon: 'graduation-cap', desc: "Programas académicos ofrecidos", color: 'blue' },
+            { name: "Estudiantes", icon: 'users', desc: "Personas matriculadas", color: 'purple' },
+            { name: "Profesores", icon: 'users', desc: "Docentes del sistema", color: 'green' },
+            { name: "Materias", icon: 'book-open', desc: "Asignaturas disponibles", color: 'orange' },
+            { name: "Inscripciones", icon: 'file-text', desc: "Registro de cursado", color: 'red' },
+            { name: "Calificaciones", icon: 'check-circle', desc: "Notas y evaluaciones", color: 'indigo' }
+          ];
+          entities.forEach(e => {
+            const m = colorMap[e.color] || colorMap.blue;
+            const card = document.createElement('div');
+            card.className = `${m.bg} border ${m.border} p-4 rounded-lg hover:shadow-lg transition-shadow`;
+            card.innerHTML = `
+              <div class="${m.text} mb-2"><i data-lucide="${e.icon}" class="w-6 h-6"></i></div>
+              <h3 class="${m.title} font-bold mb-1">${e.name}</h3>
+              <p class="text-sm text-gray-600">${e.desc}</p>
+            `;
+            wrap.appendChild(card);
+          });
+          return wrap;
+        }
+      },
+
+      {
+        id: 3,
+        title: 'Diagrama Entidad-Relación',
+        icon: 'git-branch',
+        render: () => {
+          const container = document.createElement('div');
+          container.className = 'space-y-4';
+          const box = document.createElement('div');
+          box.className = 'bg-white p-4 rounded-lg border-2 border-gray-200';
+          // placeholder diagram (you can replace with real image later)
+          box.innerHTML = `<div class="w-full rounded overflow-hidden flex items-center justify-center">
+        <img src="DiagramaGestionAcademica.jpeg" alt="Diagrama ER" class="max-w-full max-h-[24rem] object-contain">
+        </div>
+        `;
+          container.appendChild(box);
+
+          const grid = document.createElement('div');
+          grid.className = 'grid grid-cols-3 gap-3 text-sm';
+          grid.innerHTML = `
+            <div class="bg-blue-50 p-3 rounded">
+              <p class="font-semibold text-blue-800">Carreras → Estudiantes (1:N)</p>
+              <p class="text-gray-600">Una carrera tiene muchos estudiantes</p>
+            </div>
+            <div class="bg-green-50 p-3 rounded">
+              <p class="font-semibold text-green-800">Profesores → Materias (1:N)</p>
+              <p class="text-gray-600">Un profesor enseña varias materias</p>
+            </div>
+            <div class="bg-purple-50 p-3 rounded">
+              <p class="font-semibold text-purple-800">Estudiantes ↔ Materias (N:M)</p>
+              <p class="text-gray-600">Relación muchos a muchos</p>
+            </div>
+          `;
+          container.appendChild(grid);
+          return container;
+        }
+      },
+
+      {
+        id: 4,
+        title: 'Normalización - Tercera Forma Normal',
+        icon: 'check-circle',
+        render: () => {
+          const wrap = document.createElement('div');
+          wrap.className = 'space-y-5';
+          wrap.innerHTML = `
+            <div class="bg-gradient-to-r from-blue-50 to-blue-100 p-5 rounded-lg border-l-4 border-blue-500">
+              <h3 class="font-bold text-blue-900 mb-2">Primera Forma Normal (1FN)</h3>
+              <ul class="text-gray-700 space-y-1">
+                <li>✓ Valores atómicos en todos los atributos</li>
+                <li>✓ No existen grupos repetitivos</li>
+                <li>✓ Cada campo contiene un único valor</li>
+              </ul>
+            </div>
+            <div class="bg-gradient-to-r from-green-50 to-green-100 p-5 rounded-lg border-l-4 border-green-500">
+              <h3 class="font-bold text-green-900 mb-2">Segunda Forma Normal (2FN)</h3>
+              <ul class="text-gray-700 space-y-1">
+                <li>✓ Cumple con 1FN</li>
+                <li>✓ No existen dependencias parciales</li>
+                <li>✓ Atributos dependen completamente de la PK</li>
+              </ul>
+            </div>
+            <div class="bg-gradient-to-r from-purple-50 to-purple-100 p-5 rounded-lg border-l-4 border-purple-500">
+              <h3 class="font-bold text-purple-900 mb-2">Tercera Forma Normal (3FN)</h3>
+              <ul class="text-gray-700 space-y-1">
+                <li>✓ Cumple con 2FN</li>
+                <li>✓ No hay dependencias transitivas</li>
+                <li>✓ Eliminación total de redundancias</li>
+              </ul>
+            </div>
+          `;
+          return wrap;
+        }
+      },
+
+      {
+        id: 5,
+        title: 'Implementación SQL - Creación de Base de Datos',
+        icon: 'database',
+        render: () => {
+          const wrap = document.createElement('div');
+          wrap.className = 'space-y-4';
+
+          // CodeBlock factory
+          function codeBlock(title, codeStr, explanation, idKey) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'border-2 rounded-lg overflow-hidden transition-all cursor-pointer';
+            wrapper.dataset.codeblock = idKey || '';
+
+            // header (click toggles)
+            const header = document.createElement('div');
+            header.className = 'code-header p-3 font-semibold flex items-center justify-between bg-gray-100 text-gray-800';
+            header.style.cursor = 'pointer';
+            header.innerHTML = `<span>${title}</span><span class="text-sm opacity-75">Ver explicación ▶</span>`;
+            wrapper.appendChild(header);
+
+            // code area
+            const codeArea = document.createElement('div');
+            codeArea.className = 'bg-gray-900 text-green-400 p-4 font-mono text-sm overflow-x-auto';
+            codeArea.appendChild(createPreFromString(codeStr));
+            wrapper.appendChild(codeArea);
+
+            // explanation (hidden)
+            const expl = document.createElement('div');
+            expl.className = 'bg-blue-50 p-4 border-t-2 border-blue-200 hidden';
+            expl.innerHTML = `<p class="text-gray-700 leading-relaxed">${explanation}</p>`;
+            wrapper.appendChild(expl);
+
+            // click behaviour
+            header.addEventListener('click', () => {
+              const isOpen = !expl.classList.contains('hidden');
+              if (isOpen) {
+                expl.classList.add('hidden');
+                header.querySelector('span:last-child').textContent = 'Ver explicación ▶';
+                wrapper.classList.remove('selected-border');
+              } else {
+                expl.classList.remove('hidden');
+                header.querySelector('span:last-child').textContent = 'Ocultar explicación ▼';
+                wrapper.classList.add('selected-border');
+                // scroll into view slightly if needed
+                setTimeout(() => wrapper.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 120);
+              }
+            });
+
+            return wrapper;
+          }
+
+          wrap.appendChild(codeBlock('Preparación del Entorno', codes.prep, 'Esta sección garantiza un inicio limpio: cierra todas las conexiones activas y elimina versiones anteriores de la base de datos para prevenir conflictos.', 'prep'));
+          wrap.appendChild(codeBlock('Creación de la Base de Datos', codes.createDB, 'Creamos el contenedor principal donde residirán todas las tablas y datos del sistema académico.', 'create'));
+          return wrap;
+        }
+      },
+
+      {
+        id: 6,
+        title: 'Tablas Independientes - Carreras',
+        icon: 'table',
+        render: () => {
+          const wrap = document.createElement('div');
+          wrap.className = 'space-y-4';
+
+          function codeBlock(title, codeStr, explanation, idKey) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'border-2 rounded-lg overflow-hidden transition-all cursor-pointer';
+            const header = document.createElement('div');
+            header.className = 'code-header p-3 font-semibold flex items-center justify-between bg-gray-100 text-gray-800';
+            header.style.cursor = 'pointer';
+            header.innerHTML = `<span>${title}</span><span class="text-sm opacity-75">Ver explicación ▶</span>`;
+            wrapper.appendChild(header);
+            const codeArea = document.createElement('div');
+            codeArea.className = 'bg-gray-900 text-green-400 p-4 font-mono text-sm overflow-x-auto';
+            codeArea.appendChild(createPreFromString(codeStr));
+            wrapper.appendChild(codeArea);
+            const expl = document.createElement('div');
+            expl.className = 'bg-blue-50 p-4 border-t-2 border-blue-200 hidden';
+            expl.innerHTML = `<p class="text-gray-700 leading-relaxed">${explanation}</p>`;
+            wrapper.appendChild(expl);
+            header.addEventListener('click', () => {
+              const isOpen = !expl.classList.contains('hidden');
+              if (isOpen) {
+                expl.classList.add('hidden');
+                header.querySelector('span:last-child').textContent = 'Ver explicación ▶';
+                wrapper.classList.remove('selected-border');
+              } else {
+                expl.classList.remove('hidden');
+                header.querySelector('span:last-child').textContent = 'Ocultar explicación ▼';
+                wrapper.classList.add('selected-border');
+              }
+            });
+            return wrapper;
+          }
+
+          wrap.appendChild(codeBlock('Tabla Carreras', codes.carrerasDDL, 'Define los programas académicos. CarreraID es autoincremental (PK), NombreCarrera es obligatorio, y Duracion almacena los años de estudio.', 'carreras'));
+          wrap.appendChild(codeBlock('Carga de Datos - Carreras', codes.carrerasData, 'Insertamos los programas académicos disponibles en la institución con su respectiva duración en años.', 'data-carreras'));
+          return wrap;
+        }
+      },
+
+      {
+        id: 7,
+        title: 'Tablas Independientes - Profesores',
+        icon: 'table',
+        render: () => {
+          const wrap = document.createElement('div');
+          wrap.className = 'space-y-4';
+          // reuse codeblock factory
+          function codeBlock(title, codeStr, explanation, idKey) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'border-2 rounded-lg overflow-hidden transition-all cursor-pointer';
+            const header = document.createElement('div');
+            header.className = 'code-header p-3 font-semibold flex items-center justify-between bg-gray-100 text-gray-800';
+            header.style.cursor = 'pointer';
+            header.innerHTML = `<span>${title}</span><span class="text-sm opacity-75">Ver explicación ▶</span>`;
+            wrapper.appendChild(header);
+            const codeArea = document.createElement('div');
+            codeArea.className = 'bg-gray-900 text-green-400 p-4 font-mono text-sm overflow-x-auto';
+            codeArea.appendChild(createPreFromString(codeStr));
+            wrapper.appendChild(codeArea);
+            const expl = document.createElement('div');
+            expl.className = 'bg-blue-50 p-4 border-t-2 border-blue-200 hidden';
+            expl.innerHTML = `<p class="text-gray-700 leading-relaxed">${explanation}</p>`;
+            wrapper.appendChild(expl);
+            header.addEventListener('click', () => {
+              const isOpen = !expl.classList.contains('hidden');
+              if (isOpen) {
+                expl.classList.add('hidden');
+                header.querySelector('span:last-child').textContent = 'Ver explicación ▶';
+                wrapper.classList.remove('selected-border');
+              } else {
+                expl.classList.remove('hidden');
+                header.querySelector('span:last-child').textContent = 'Ocultar explicación ▼';
+                wrapper.classList.add('selected-border');
+              }
+            });
+            return wrapper;
+          }
+
+          wrap.appendChild(codeBlock('Tabla Profesores', codes.profesoresDDL, 'Registra los docentes del sistema. ProfesorID es la clave primaria, Nombre y Apellido son obligatorios, y Especialidad indica su área de conocimiento.', 'profesores'));
+          wrap.appendChild(codeBlock('Carga de Datos - Profesores', codes.profesoresData, 'Insertamos el cuerpo docente con sus respectivas especialidades académicas.', 'data-profesores'));
+          return wrap;
+        }
+      },
+
+      {
+        id: 8,
+        title: 'Tablas Dependientes - Estudiantes',
+        icon: 'table',
+        render: () => {
+          const wrap = document.createElement('div');
+          wrap.className = 'space-y-4';
+
+          function codeBlock(title, codeStr, explanation, idKey) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'border-2 rounded-lg overflow-hidden transition-all cursor-pointer';
+            const header = document.createElement('div');
+            header.className = 'code-header p-3 font-semibold flex items-center justify-between bg-gray-100 text-gray-800';
+            header.style.cursor = 'pointer';
+            header.innerHTML = `<span>${title}</span><span class="text-sm opacity-75">Ver explicación ▶</span>`;
+            wrapper.appendChild(header);
+            const codeArea = document.createElement('div');
+            codeArea.className = 'bg-gray-900 text-green-400 p-4 font-mono text-sm overflow-x-auto';
+            codeArea.appendChild(createPreFromString(codeStr));
+            wrapper.appendChild(codeArea);
+            const expl = document.createElement('div');
+            expl.className = 'bg-blue-50 p-4 border-t-2 border-blue-200 hidden';
+            expl.innerHTML = `<p class="text-gray-700 leading-relaxed">${explanation}</p>`;
+            wrapper.appendChild(expl);
+            header.addEventListener('click', () => {
+              const isOpen = !expl.classList.contains('hidden');
+              if (isOpen) {
+                expl.classList.add('hidden');
+                header.querySelector('span:last-child').textContent = 'Ver explicación ▶';
+                wrapper.classList.remove('selected-border');
+              } else {
+                expl.classList.remove('hidden');
+                header.querySelector('span:last-child').textContent = 'Ocultar explicación ▼';
+                wrapper.classList.add('selected-border');
+              }
+            });
+            return wrapper;
+          }
+
+          wrap.appendChild(codeBlock('Tabla Estudiantes', codes.estudiantesDDL, 'Almacena los estudiantes matriculados. CarreraID es una clave foránea (FK) que establece la relación con Carreras, garantizando que solo se asignen carreras existentes.', 'estudiantes'));
+          wrap.appendChild(codeBlock('Carga de Datos - Estudiantes', codes.estudiantesData, 'Insertamos estudiantes asignándolos a carreras específicas mediante el CarreraID. La integridad referencial valida que la carrera exista.', 'data-estudiantes'));
+          return wrap;
+        }
+      },
+
+      {
+        id: 9,
+        title: 'Tablas Dependientes - Materias',
+        icon: 'table',
+        render: () => {
+          const wrap = document.createElement('div');
+          wrap.className = 'space-y-4';
+          function codeBlock(title, codeStr, explanation, idKey) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'border-2 rounded-lg overflow-hidden transition-all cursor-pointer';
+            const header = document.createElement('div');
+            header.className = 'code-header p-3 font-semibold flex items-center justify-between bg-gray-100 text-gray-800';
+            header.style.cursor = 'pointer';
+            header.innerHTML = `<span>${title}</span><span class="text-sm opacity-75">Ver explicación ▶</span>`;
+            wrapper.appendChild(header);
+            const codeArea = document.createElement('div');
+            codeArea.className = 'bg-gray-900 text-green-400 p-4 font-mono text-sm overflow-x-auto';
+            codeArea.appendChild(createPreFromString(codeStr));
+            wrapper.appendChild(codeArea);
+            const expl = document.createElement('div');
+            expl.className = 'bg-blue-50 p-4 border-t-2 border-blue-200 hidden';
+            expl.innerHTML = `<p class="text-gray-700 leading-relaxed">${explanation}</p>`;
+            wrapper.appendChild(expl);
+            header.addEventListener('click', () => {
+              const isOpen = !expl.classList.contains('hidden');
+              if (isOpen) {
+                expl.classList.add('hidden');
+                header.querySelector('span:last-child').textContent = 'Ver explicación ▶';
+                wrapper.classList.remove('selected-border');
+              } else {
+                expl.classList.remove('hidden');
+                header.querySelector('span:last-child').textContent = 'Ocultar explicación ▼';
+                wrapper.classList.add('selected-border');
+              }
+            });
+            return wrapper;
+          }
+
+          wrap.appendChild(codeBlock('Tabla Materias', codes.materiasDDL, 'Define las asignaturas del sistema. Tiene dos claves foráneas: ProfesorID (quién enseña) y CarreraID (a qué programa pertenece).', 'materias'));
+          wrap.appendChild(codeBlock('Carga de Datos - Materias', codes.materiasData, 'Insertamos materias asignando un profesor y una carrera a cada una. Las FK garantizan que ambos existan en el sistema.', 'data-materias'));
+          return wrap;
+        }
+      },
+
+      {
+        id: 10,
+        title: 'Tablas Intermedias - Inscripciones',
+        icon: 'table',
+        render: () => {
+          const wrap = document.createElement('div');
+          wrap.className = 'space-y-4';
+
+          function codeBlock(title, codeStr, explanation, idKey) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'border-2 rounded-lg overflow-hidden transition-all cursor-pointer';
+            const header = document.createElement('div');
+            header.className = 'code-header p-3 font-semibold flex items-center justify-between bg-gray-100 text-gray-800';
+            header.style.cursor = 'pointer';
+            header.innerHTML = `<span>${title}</span><span class="text-sm opacity-75">Ver explicación ▶</span>`;
+            wrapper.appendChild(header);
+            const codeArea = document.createElement('div');
+            codeArea.className = 'bg-gray-900 text-green-400 p-4 font-mono text-sm overflow-x-auto';
+            codeArea.appendChild(createPreFromString(codeStr));
+            wrapper.appendChild(codeArea);
+            const expl = document.createElement('div');
+            expl.className = 'bg-blue-50 p-4 border-t-2 border-blue-200 hidden';
+            expl.innerHTML = `<p class="text-gray-700 leading-relaxed">${explanation}</p>`;
+            wrapper.appendChild(expl);
+            header.addEventListener('click', () => {
+              const isOpen = !expl.classList.contains('hidden');
+              if (isOpen) {
+                expl.classList.add('hidden');
+                header.querySelector('span:last-child').textContent = 'Ver explicación ▶';
+                wrapper.classList.remove('selected-border');
+              } else {
+                expl.classList.remove('hidden');
+                header.querySelector('span:last-child').textContent = 'Ocultar explicación ▼';
+                wrapper.classList.add('selected-border');
+              }
+            });
+            return wrapper;
+          }
+
+          wrap.appendChild(codeBlock('Tabla Inscripciones', codes.inscripcionesDDL, 'Tabla intermedia que resuelve la relación muchos-a-muchos entre Estudiantes y Materias.', 'inscripciones'));
+          wrap.appendChild(codeBlock('Carga de Datos - Inscripciones', codes.inscripcionesData, 'Registramos qué estudiantes cursan qué materias y cuándo se inscribieron. Cada registro es una relación única estudiante-materia.', 'data-inscripciones'));
+          return wrap;
+        }
+      },
+
+      {
+        id: 11,
+        title: 'Tablas Intermedias - Calificaciones',
+        icon: 'table',
+        render: () => {
+          const wrap = document.createElement('div');
+          wrap.className = 'space-y-4';
+          function codeBlock(title, codeStr, explanation, idKey) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'border-2 rounded-lg overflow-hidden transition-all cursor-pointer';
+            const header = document.createElement('div');
+            header.className = 'code-header p-3 font-semibold flex items-center justify-between bg-gray-100 text-gray-800';
+            header.style.cursor = 'pointer';
+            header.innerHTML = `<span>${title}</span><span class="text-sm opacity-75">Ver explicación ▶</span>`;
+            wrapper.appendChild(header);
+            const codeArea = document.createElement('div');
+            codeArea.className = 'bg-gray-900 text-green-400 p-4 font-mono text-sm overflow-x-auto';
+            codeArea.appendChild(createPreFromString(codeStr));
+            wrapper.appendChild(codeArea);
+            const expl = document.createElement('div');
+            expl.className = 'bg-blue-50 p-4 border-t-2 border-blue-200 hidden';
+            expl.innerHTML = `<p class="text-gray-700 leading-relaxed">${explanation}</p>`;
+            wrapper.appendChild(expl);
+            header.addEventListener('click', () => {
+              const isOpen = !expl.classList.contains('hidden');
+              if (isOpen) {
+                expl.classList.add('hidden');
+                header.querySelector('span:last-child').textContent = 'Ver explicación ▶';
+                wrapper.classList.remove('selected-border');
+              } else {
+                expl.classList.remove('hidden');
+                header.querySelector('span:last-child').textContent = 'Ocultar explicación ▼';
+                wrapper.classList.add('selected-border');
+              }
+            });
+            return wrapper;
+          }
+          wrap.appendChild(codeBlock('Tabla Calificaciones', codes.calificacionesDDL, 'Registra las notas de los estudiantes. Permite múltiples notas por inscripción (parciales, final).', 'calificaciones'));
+          wrap.appendChild(codeBlock('Carga de Datos - Calificaciones', codes.calificacionesData, 'Insertamos las calificaciones obtenidas en diferentes períodos. Cada nota está vinculada a una inscripción específica.', 'data-calificaciones'));
+          return wrap;
+        }
+      },
+
+      {
+        id: 12,
+        title: 'Conclusiones del Proyecto',
+        icon: 'check-circle',
+        render: () => {
+          const wrap = document.createElement('div');
+          wrap.className = 'space-y-5';
+          wrap.innerHTML = `
+            <div class="grid grid-cols-2 gap-4">
+              <div class="bg-green-50 border-l-4 border-green-500 p-4 rounded">
+                <h3 class="font-bold text-green-800 mb-2">✓ Objetivos Cumplidos</h3>
+                <ul class="text-sm space-y-1 text-gray-700">
+                  <li>• Normalización hasta 3FN</li>
+                  <li>• Integridad referencial garantizada</li>
+                  <li>• Eliminación de redundancias</li>
+                  <li>• Estructura escalable</li>
+                </ul>
+              </div>
+              <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
+                <h3 class="font-bold text-blue-800 mb-2">✓ Ventajas del Sistema</h3>
+                <ul class="text-sm space-y-1 text-gray-700">
+                  <li>• Centralización de información</li>
+                  <li>• Trazabilidad completa</li>
+                  <li>• Validaciones automáticas</li>
+                  <li>• Facilidad de mantenimiento</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="bg-purple-50 border border-purple-200 p-5 rounded-lg">
+              <h3 class="font-bold text-purple-900 mb-3">Aplicaciones Prácticas</h3>
+              <div class="grid grid-cols-2 gap-3 text-sm text-gray-700">
+                <div>✓ Gestión de carreras y materias</div>
+                <div>✓ Control de inscripciones</div>
+                <div>✓ Seguimiento de rendimiento</div>
+                <div>✓ Generación de certificados</div>
+                <div>✓ Identificación de alumnos en riesgo</div>
+                <div>✓ Análisis de efectividad docente</div>
+              </div>
+            </div>
+
+            <div class="bg-gradient-to-r from-gray-700 to-gray-900 text-white p-6 rounded-lg text-center">
+              <p class="text-lg font-semibold">Base de datos normalizada, escalable y con integridad garantizada</p>
+              <p class="text-sm mt-2 opacity-90">6 tablas principales • 8 claves foráneas • Normalización 3FN</p>
+            </div>
+          `;
+          return wrap;
+        }
+      }
+    ]; // end slides array
+
+    // App state
+    let currentIndex = 0;
+
+    // DOM refs
+    const headerEl = document.getElementById('header');
+    const contentEl = document.getElementById('content');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const dotsEl = document.getElementById('dots');
+
+    // Render header for current slide
+    function renderHeader(slide) {
+      headerEl.innerHTML = '';
+      const flex = document.createElement('div');
+      flex.className = 'flex items-center justify-between';
+      const left = document.createElement('div');
+      left.className = 'flex items-center gap-4';
+      const iconWrap = document.createElement('div');
+      iconWrap.className = 'flex items-center gap-4';
+      // icon
+      const iconEl = document.createElement('div');
+      iconEl.className = 'text-blue-600';
+      iconEl.innerHTML = `<i data-lucide="${slide.icon}" class="w-8 h-8"></i>`;
+      iconWrap.appendChild(iconEl);
+      // title/subtitle
+      const titleWrap = document.createElement('div');
+      titleWrap.innerHTML = `<h1 class="text-3xl font-bold text-gray-800">${slide.title}</h1>`;
+      if (slide.subtitle) titleWrap.innerHTML += `<p class="text-gray-600 mt-1">${slide.subtitle}</p>`;
+      left.appendChild(iconWrap);
+      left.appendChild(titleWrap);
+      flex.appendChild(left);
+
+      const right = document.createElement('div');
+      right.className = 'text-sm text-gray-500';
+      right.textContent = `Diapositiva ${currentIndex + 1} de ${slides.length}`;
+
+      flex.appendChild(right);
+      headerEl.appendChild(flex);
+    }
+
+    // Render content for current slide
+    function renderContent(slide) {
+      contentEl.innerHTML = '';
+      contentEl.appendChild(slide.render());
+      // After injecting new content, refresh lucide icons
+      if (window.lucide && typeof window.lucide.createIcons === 'function') {
+        try { window.lucide.createIcons(); } catch (e) { /* ignore */ }
+      }
+    }
+
+    // Render dots
+    function renderDots() {
+      dotsEl.innerHTML = '';
+      slides.forEach((s, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'slide-indicator rounded-full transition-all';
+        btn.dataset.idx = String(idx);
+        if (idx === currentIndex) {
+          btn.className += ' bg-blue-600 w-8 h-3 rounded-full';
+        } else {
+          btn.className += ' bg-gray-300 w-3 h-3 hover:bg-gray-400';
+        }
+        btn.addEventListener('click', () => {
+          goToSlide(idx);
+        });
+        dotsEl.appendChild(btn);
+      });
+    }
+
+    // Navigation functions
+    function goToSlide(idx) {
+      if (idx < 0) idx = 0;
+      if (idx > slides.length - 1) idx = slides.length - 1;
+      currentIndex = idx;
+      const slide = slides[currentIndex];
+      renderHeader(slide);
+      renderContent(slide);
+      renderDots();
+      updateButtons();
+      // analytics: focus top
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function nextSlide() { if (currentIndex < slides.length - 1) goToSlide(currentIndex + 1); }
+    function prevSlideFn() { if (currentIndex > 0) goToSlide(currentIndex - 1); }
+
+    function updateButtons() {
+      prevBtn.disabled = currentIndex === 0;
+      nextBtn.disabled = currentIndex === slides.length - 1;
+    }
+
+    // Attach controls
+    prevBtn.addEventListener('click', prevSlideFn);
+    nextBtn.addEventListener('click', nextSlide);
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'ArrowRight') nextSlide();
+      if (ev.key === 'ArrowLeft') prevSlideFn();
+    });
+
+    // Initialize app
+    goToSlide(0);
+
+    // After first render, ensure lucide icons are created (for first slide)
+    if (window.lucide && typeof window.lucide.createIcons === 'function') {
+      try { window.lucide.createIcons(); } catch (e) { /* ignore */ }
+    }
+
+  })();
+  </script>
+</body>
+</html>
